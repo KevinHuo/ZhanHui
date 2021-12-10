@@ -13,7 +13,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.detecthands.R;
 import com.example.detecthands.utils.FileUtils;
-import com.example.detecthands.utils.GesturesDetector;
+import com.example.detecthands.utils.GesturesDetector2;
 import com.example.detecthands.utils.SharedPreferencesUtils;
 import com.example.detecthands.utils.TextureProcessor;
 import com.example.detecthands.utils.ToastUtils;
@@ -33,7 +33,7 @@ public class USBCameraActivity extends AppCompatActivity {
     private UVCCameraHelper mCameraHelper;
     private UVCCameraTextureView mUVCCameraView;
     private Hands mHands;
-    private GesturesDetector mGesturesDetector;
+    private GesturesDetector2 mGesturesDetector;
 
     private QNSenseTimePlugin mSenseTimePlugin;
     private TextureProcessor mMirrorProcessor;
@@ -60,7 +60,7 @@ public class USBCameraActivity extends AppCompatActivity {
         }
         ToastUtils.init(this);
 
-        mTvFPS = findViewById(R.id.textView);
+        mTvFPS = findViewById(R.id.tv_fps);
 
         initHandDetect();
         initUSBCamera();
@@ -134,7 +134,7 @@ public class USBCameraActivity extends AppCompatActivity {
 
         mHands.setErrorListener((message, e) -> Log.e("飞", "MediaPipe Hands error:" + message));
 
-        mGesturesDetector = new GesturesDetector();
+        mGesturesDetector = new GesturesDetector2();
         mGesturesDetector.setGesturesListener(mGesturesListener);
         mHands.setResultListener(result -> mGesturesDetector.dealHandDetectResult(result));
     }
@@ -142,7 +142,6 @@ public class USBCameraActivity extends AppCompatActivity {
     private void initUSBCamera() {
         mUVCCameraView = findViewById(R.id.camera_view);
         mUVCCameraView.setCallback(mCallback);
-        mUVCCameraView.setEGLContext(mHands.getGlContext());
 //        mUVCCameraView.setAspectRatio(1080 * 1.0f / 2259);
 
         mCameraHelper = UVCCameraHelper.getInstance();
@@ -218,10 +217,7 @@ public class USBCameraActivity extends AppCompatActivity {
 //            }
 //            int newTexId = mMirrorProcessor.draw(texId);
             int newTexId = texId;
-//            mHands.send(new TextureFrameImpl(newTexId, texWidth, texHeight, System.currentTimeMillis()));
-            return mSenseTimePlugin.processTexture(newTexId, 4016, 2259,true);
-//            return texId;
-//            return newTexId;
+            return mSenseTimePlugin.processTexture(newTexId, texWidth, texHeight,true);
         }
 
         @Override
@@ -234,9 +230,9 @@ public class USBCameraActivity extends AppCompatActivity {
         }
     };
 
-    private final GesturesDetector.GesturesListener mGesturesListener = new GesturesDetector.GesturesListener() {
+    private final GesturesDetector2.GesturesListener mGesturesListener = new GesturesDetector2.GesturesListener() {
         @Override
-        public void onDetect(GesturesDetector.Gestures gestures) {
+        public void onDetect(GesturesDetector2.Gestures gestures) {
             Log.e("飞", gestures.name());
             ToastUtils.showShortToast(gestures.name());
             switch (gestures) {

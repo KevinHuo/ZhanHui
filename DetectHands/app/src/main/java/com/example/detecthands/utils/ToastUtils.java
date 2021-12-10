@@ -3,6 +3,7 @@ package com.example.detecthands.utils;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.widget.Toast;
 
 public class ToastUtils {
@@ -34,6 +35,7 @@ public class ToastUtils {
                 sToast.setText(message);
                 sToast.setDuration(duration);
                 sToast.show();
+                Log.e("飞", message);
             }
         };
         if (Looper.myLooper() == Looper.getMainLooper()) {

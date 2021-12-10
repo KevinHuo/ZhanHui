@@ -26,6 +26,7 @@ package com.serenegiant.usb.widget;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
+import android.opengl.EGLContext;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -43,8 +44,6 @@ import com.serenegiant.usb.encoder.MediaVideoEncoder;
 import com.serenegiant.usb.processor.TextureDrawer;
 import com.serenegiant.usb.processor.TextureProcessor;
 import com.serenegiant.utils.FpsCounter;
-
-import javax.microedition.khronos.egl.EGLContext;
 
 /**
  * change the view size with keeping the specified aspect ratio.

@@ -3,81 +3,129 @@ package com.example.detecthands.utils;
 import android.os.Handler;
 import android.util.Pair;
 
-import com.google.mediapipe.formats.proto.LandmarkProto;
-import com.google.mediapipe.solutions.hands.HandLandmark;
-import com.google.mediapipe.solutions.hands.HandsResult;
+import com.sensetime.stmobile.model.STPoint;
 
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class GesturesDetector {
 
-    private static final int DETECT_NUMS = 10;
-    private final LinkedBlockingQueue<Pair<Float, Float>> mLeftHandMarkQueue = new LinkedBlockingQueue<>();
-    private final LinkedBlockingQueue<Pair<Float, Float>> mRightHandMarkQueue = new LinkedBlockingQueue<>();
+    private int mDetectNum = 7;
+    private final LinkedBlockingQueue<Pair<Float, Float>> mHandMarkQueue = new LinkedBlockingQueue<>();
     private boolean mNeedDetect = true;
 
     private Handler mHandler = new Handler();
     private GesturesListener mGesturesListener;
+    private long mLastDetectTime;
+
+    public void setDetectNum(int num) {
+        mDetectNum = num / 3;
+    }
 
     public void setGesturesListener(GesturesListener listener) {
         mGesturesListener = listener;
     }
 
-    public void dealHandDetectResult(HandsResult handsResult) {
-        if (!mNeedDetect || handsResult.multiHandLandmarks().isEmpty()) {
+    public void detectWaveHand(float x, float y) {
+        if (!mNeedDetect) {
             return;
         }
-
-        LandmarkProto.NormalizedLandmark landmark =
-                handsResult.multiHandLandmarks().get(0).getLandmarkList().get(HandLandmark.MIDDLE_FINGER_TIP);
-
-        if (handsResult.multiHandedness().get(0).getLabel().equalsIgnoreCase("left")) {
-            mLeftHandMarkQueue.offer(new Pair<>(landmark.getX(), landmark.getY()));
-        } else {
-            mRightHandMarkQueue.offer(new Pair<>(landmark.getX(), landmark.getY()));
+        if ((System.currentTimeMillis() - mLastDetectTime) > 1000) {
+            mHandMarkQueue.clear();
         }
+        mLastDetectTime = System.currentTimeMillis();
 
-        if (mLeftHandMarkQueue.size() < DETECT_NUMS && mRightHandMarkQueue.size() < DETECT_NUMS) {
+        mHandMarkQueue.offer(new Pair<>(x, y));
+        if (mHandMarkQueue.size() < mDetectNum) {
             return;
+        }
+        while (mHandMarkQueue.size() > mDetectNum) {
+            mHandMarkQueue.poll();
         }
 
         float moveX = 0;
         float moveY = 0;
         Pair<Float, Float> last;
-        if (mLeftHandMarkQueue.size() > 0) {
-            last = mLeftHandMarkQueue.poll();
-            for (Pair<Float, Float> pair : mLeftHandMarkQueue) {
-                moveX += last.first - pair.first;
-                moveY += last.second - pair.second;
-                last = pair;
-            }
-            if (Math.abs(moveY) < 0.2) {
-                if (moveX > 0.3) {
-                    mGesturesListener.onDetect(Gestures.LEFT_HAND_RIGHT_WAVE);
-                    repeatDetect();
-                } else if (moveX < -0.3) {
-                    mGesturesListener.onDetect(Gestures.LEFT_HAND_LEFT_WAVE);
-                    repeatDetect();
-                }
-            }
+        mHandMarkQueue.size();
+        last = mHandMarkQueue.poll();
+        for (Pair<Float, Float> pair : mHandMarkQueue) {
+            moveX += last.first - pair.first;
+            moveY += last.second - pair.second;
+            last = pair;
         }
 
-        if (mRightHandMarkQueue.size() > 0) {
-            moveX = 0;
-            moveY = 0;
-            last = mRightHandMarkQueue.poll();
-            for (Pair<Float, Float> pair : mRightHandMarkQueue) {
+        if (moveY > 700) {
+            mHandMarkQueue.clear();
+            return;
+        }
+        if (moveX > 400) {
+            mGesturesListener.onDetect(Gestures.RIGHT_WAVE);
+            repeatDetect();
+            return;
+        } else if (moveX < -400) {
+            mGesturesListener.onDetect(Gestures.LEFT_WAVE);
+            repeatDetect();
+            return;
+        }
+
+        // 轨迹检测
+        moveX = 0;
+        boolean direction = true;
+        for (Pair<Float, Float> pair : mHandMarkQueue) {
+            float cha = last.first - pair.first;
+            if (cha > 0) {
+                if (!direction) {
+                    direction = true;
+                    moveX = 0;
+                }
                 moveX += last.first - pair.first;
-                moveY += last.second - pair.second;
-                last = pair;
+            } else {
+                if (direction) {
+                    direction = false;
+                    moveX = 0;
+                }
+                moveX += last.first - pair.first;
             }
-            if (Math.abs(moveY) < 0.2) {
-                if (moveX > 0.3) {
-                    mGesturesListener.onDetect(Gestures.RIGHT_HAND_RIGHT_WAVE);
-                    repeatDetect();
-                } else if (moveX < -0.3) {
-                    mGesturesListener.onDetect(Gestures.RIGHT_HAND_LEFT_WAVE);
-                    repeatDetect();
+
+            if (moveX > 400) {
+                mGesturesListener.onDetect(Gestures.RIGHT_WAVE);
+                repeatDetect();
+                break;
+            } else if (moveX < -400) {
+                mGesturesListener.onDetect(Gestures.LEFT_WAVE);
+                repeatDetect();
+                break;
+            }
+
+            last = pair;
+        }
+    }
+
+    public void detectGesture(STPoint[] stPoints) {
+        if ((System.currentTimeMillis() - mLastDetectTime) < 2000) {
+            return;
+        }
+
+        if (Math.abs(stPoints[7].getY() - stPoints[4].getY()) < 50) {
+            // 食指上的各个点在一个水平面上
+            if ((stPoints[7].getX() - stPoints[4].getX()) < 0) {
+                // 指向左边
+                if ((stPoints[7].getX() - stPoints[6].getX()) < 0 && (stPoints[6].getX() - stPoints[5].getX()) < 0 && (stPoints[5].getX() - stPoints[4].getX()) < 0) {
+                    // 说明食指是展开的
+                    if ((stPoints[7].getX() - stPoints[11].getX()) < 0 && (stPoints[6].getX() - stPoints[15].getX()) < 0 && (stPoints[6].getX() - stPoints[19].getX()) < 0) {
+                        // 食指之间的 x 坐标小于中指，无名指，小拇指，说明另外三个手指是缩起来的
+                        mGesturesListener.onDetect(Gestures.LEFT);
+                        mLastDetectTime = System.currentTimeMillis();
+                    }
+                }
+            } else {
+                // 指向右边
+                if ((stPoints[7].getX() - stPoints[6].getX()) > 0 && (stPoints[6].getX() - stPoints[5].getX()) > 0 && (stPoints[5].getX() - stPoints[4].getX()) > 0) {
+                    // 说明食指是展开的
+                    if ((stPoints[7].getX() - stPoints[11].getX()) > 0 && (stPoints[6].getX() - stPoints[15].getX()) > 0 && (stPoints[6].getX() - stPoints[19].getX()) > 0) {
+                        // 食指之间的 x 坐标大于中指，无名指，小拇指，说明另外三个手指是缩起来的
+                        mGesturesListener.onDetect(Gestures.RIGHT);
+                        mLastDetectTime = System.currentTimeMillis();
+                    }
                 }
             }
         }
@@ -85,8 +133,7 @@ public class GesturesDetector {
 
     private void repeatDetect() {
         mNeedDetect = false;
-        mLeftHandMarkQueue.clear();
-        mRightHandMarkQueue.clear();
+        mHandMarkQueue.clear();
         mHandler.postDelayed(() -> mNeedDetect = true, 1000);
     }
 
@@ -95,10 +142,10 @@ public class GesturesDetector {
     }
 
     public enum Gestures {
-        LEFT_HAND_LEFT_WAVE,
-        LEFT_HAND_RIGHT_WAVE,
-        RIGHT_HAND_LEFT_WAVE,
-        RIGHT_HAND_RIGHT_WAVE
+        LEFT_WAVE,
+        RIGHT_WAVE,
+        LEFT,
+        RIGHT
     }
 
 }
