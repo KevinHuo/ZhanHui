@@ -23,11 +23,14 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.detecthands.R;
+import com.example.detecthands.model.TextureFrameImpl;
 import com.example.detecthands.sticker.StickerDataUtils;
 import com.example.detecthands.utils.GesturesDetector;
 import com.example.detecthands.utils.TextureProcessor;
 import com.example.detecthands.utils.ToastUtils;
 import com.example.detecthands.utils.UploadImageUtil;
+import com.google.mediapipe.solutions.hands.Hands;
+import com.google.mediapipe.solutions.hands.HandsOptions;
 import com.qiniu.pili.droid.shortvideo.PLAudioEncodeSetting;
 import com.qiniu.pili.droid.shortvideo.PLCameraParamSelectListener;
 import com.qiniu.pili.droid.shortvideo.PLCameraSetting;
@@ -42,7 +45,6 @@ import com.qiniu.sensetimeplugin.QNSenseTimePlugin;
 import com.sensetime.stmobile.STMobileHumanActionNative;
 import com.sensetime.stmobile.model.STAnimalFace;
 import com.sensetime.stmobile.model.STHumanAction;
-import com.sensetime.stmobile.model.STPoint;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -51,15 +53,23 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 
+import javax.microedition.khronos.egl.EGL10;
+import javax.microedition.khronos.egl.EGLConfig;
+import javax.microedition.khronos.egl.EGLContext;
+import javax.microedition.khronos.egl.EGLDisplay;
+
 public class MainActivity extends AppCompatActivity {
 
-    private final int TIME_REDUCE = 100;
+    private static final int HANDLE_TIME_REDUCE = 100;
+    private static final boolean CAMERA_FRONT = false;
 
     private PLShortVideoRecorder mShortVideoRecorder;
+    private Hands mHands;
     private GesturesDetector mGesturesDetector;
 
     private QNSenseTimePlugin mSenseTimePlugin;
     private TextureProcessor mMirrorProcessor;
+    private TextureProcessor mMirrorProcessor2;
 
     private TextView mTvFPS;
     private int mFPS;
@@ -68,6 +78,7 @@ public class MainActivity extends AppCompatActivity {
     private int mDetectNum;
     private boolean mNeedDetect = true;
     private TextView mTvNumber;
+
     private Animation mNumberAnimation;
     private int mCurrentNumber = 3;
     private SoundPool mSoundPool;
@@ -82,12 +93,19 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.activity_main);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 777);
+            requestPermissions(new String[]{
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+            }, 777);
         }
 
         initEffect();
+        initHands();
         initShortVideo();
         StickerDataUtils.getStickerPathList();
 
@@ -102,10 +120,32 @@ public class MainActivity extends AppCompatActivity {
         Log.e("飞", "onCreate: log 有效");
     }
 
+    private void initHands() {
+        mHands = new Hands(this,
+                HandsOptions.builder()
+                        .setStaticImageMode(false)
+                        .setMaxNumHands(2)
+                        .setRunOnGpu(true)
+                        .build());
+
+        mHands.setErrorListener((message, e) -> Log.e("飞", "MediaPipe Hands error:" + message));
+        mHands.setResultListener(
+                handsResult -> {
+                    if (handsResult.multiHandLandmarks().size() > 0) {
+                        mDetectNum++;
+//                        mGesturesDetector.detectWaveHand(handsResult);
+                        mGesturesDetector.trajectoryTracking(handsResult);
+                    }
+                });
+
+        mGesturesDetector = new GesturesDetector();
+        mGesturesDetector.setGesturesListener(mGesturesListener);
+    }
+
     private void initEffect() {
         mSenseTimePlugin = new QNSenseTimePlugin.Builder(this)
                 .setLicenseAssetPath("SenseME.lic")
-                .setModelActionAssetPath("M_SenseME_Face_Video_5.3.3.model")
+                .setModelActionAssetPath("M_SenseME_Face_Video_7.0.0.model")
                 .build();
         boolean isAuthorized = mSenseTimePlugin.checkLicense();
         if (!isAuthorized) {
@@ -115,6 +155,7 @@ public class MainActivity extends AppCompatActivity {
         // 由于短视频 SDK 纹理回调的方向为竖直镜像的，所以需要一个竖直镜像操作将其转正
         mSenseTimePlugin.updateDirection(0, false, true);
         mMirrorProcessor = new TextureProcessor();
+        mMirrorProcessor2 = new TextureProcessor();
 
         mSenseTimePlugin.setFilterStrength(0.8f);
 
@@ -124,7 +165,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onDetectedHumanAction(STHumanAction stHumanAction) {
                 if (stHumanAction.getHandInfos() != null) {
-                    mDetectNum++;
                     if (!mNeedDetect) {
                         return;
                     }
@@ -132,12 +172,8 @@ public class MainActivity extends AppCompatActivity {
                     if (stHumanAction.getHandInfos()[0].getHandAction() == STMobileHumanActionNative.ST_MOBILE_HAND_SCISSOR) {
                         mNeedDetect = false;
                         mHandler.postDelayed(() -> mNeedDetect = true, 5000);
-                        mHandler.sendEmptyMessage(TIME_REDUCE);
+                        mHandler.sendEmptyMessage(HANDLE_TIME_REDUCE);
                         return;
-                    }
-                    STPoint[] stPoints = stHumanAction.getHandInfos()[0].getExtra2dKeyPoints();
-                    if (stPoints != null) {
-                        mGesturesDetector.detectGesture(stPoints);
                     }
                 }
             }
@@ -151,11 +187,27 @@ public class MainActivity extends AppCompatActivity {
 
     private void initShortVideo() {
         GLSurfaceView glSurfaceView = findViewById(R.id.surfaceView);
+        glSurfaceView.setEGLContextFactory(new GLSurfaceView.EGLContextFactory() {
+            @Override
+            public EGLContext createContext(EGL10 egl, EGLDisplay display, EGLConfig eglConfig) {
+                int[] contextAttrs = new int[]{12440, mHands.getGlMajorVersion(), 12344};
+                return egl.eglCreateContext(display, eglConfig, mHands.getGlContext(), contextAttrs);
+            }
+
+            @Override
+            public void destroyContext(EGL10 egl, EGLDisplay display, EGLContext context) {
+
+            }
+        });
 
         mShortVideoRecorder = new PLShortVideoRecorder();
 
         PLCameraSetting cameraSetting = new PLCameraSetting();
-        cameraSetting.setCameraId(PLCameraSetting.CAMERA_FACING_ID.CAMERA_FACING_FRONT);
+        if (CAMERA_FRONT) {
+            cameraSetting.setCameraId(PLCameraSetting.CAMERA_FACING_ID.CAMERA_FACING_FRONT);
+        } else {
+            cameraSetting.setCameraId(PLCameraSetting.CAMERA_FACING_ID.CAMERA_FACING_BACK);
+        }
 
         PLMicrophoneSetting microphoneSetting = new PLMicrophoneSetting();
 
@@ -171,11 +223,6 @@ public class MainActivity extends AppCompatActivity {
 
         mShortVideoRecorder.setCameraParamSelectListener(mCameraParamSelectListener);
         mShortVideoRecorder.setVideoFilterListener(mVideoFilterListener);
-
-        PLWatermarkSetting watermarkSetting = new PLWatermarkSetting();
-        watermarkSetting.setSize(1.0f, 1.0f);
-        watermarkSetting.setResourceId(R.drawable.water_mark);
-        mShortVideoRecorder.setWatermark(watermarkSetting);
     }
 
     private void captureFrame() {
@@ -187,7 +234,7 @@ public class MainActivity extends AppCompatActivity {
 
             Log.i("飞", "captured frame width: " + capturedFrame.getWidth() + " height: " + capturedFrame.getHeight() + " timestamp: " + capturedFrame.getTimestampMs());
             try {
-                String savePath = getExternalFilesDir(Environment.DIRECTORY_MOVIES) + "/"+System.currentTimeMillis()+".jpg";
+                String savePath = getExternalFilesDir(Environment.DIRECTORY_MOVIES) + "/" + System.currentTimeMillis() + ".jpg";
                 FileOutputStream fos = new FileOutputStream(savePath);
                 capturedFrame.toBitmap().compress(Bitmap.CompressFormat.JPEG, 100, fos);
                 fos.close();
@@ -215,7 +262,8 @@ public class MainActivity extends AppCompatActivity {
         public void handleMessage(@NonNull Message msg) {
             super.handleMessage(msg);
             switch (msg.what) {
-                case TIME_REDUCE:
+                case HANDLE_TIME_REDUCE:
+                    // 倒计时逻辑
                     if (mCurrentNumber == 0) {
                         mTvNumber.setVisibility(View.GONE);
                         mCurrentNumber = 3;
@@ -224,7 +272,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         mTvNumber.setVisibility(View.VISIBLE);
                         mTvNumber.setText(mCurrentNumber + "");
-                        mHandler.sendEmptyMessageDelayed(TIME_REDUCE, 1000);
+                        mHandler.sendEmptyMessageDelayed(HANDLE_TIME_REDUCE, 1000);
                         mNumberAnimation.reset();
                         mTvNumber.startAnimation(mNumberAnimation);
                         mSoundPool.play(mTimeReduceSoundId, 1, 1, 0, 0, 1);
@@ -257,22 +305,21 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onSurfaceCreated() {
             mSenseTimePlugin.init();
-            mSenseTimePlugin.addSubModelFromAssetsFile("M_SenseME_Face_Extra_5.23.0.model");
+            mSenseTimePlugin.addSubModelFromAssetsFile("M_SenseME_Face_Extra_Advanced_6.0.13");
             mSenseTimePlugin.addSubModelFromAssetsFile("M_SenseME_Iris_2.0.0.model");
-            mSenseTimePlugin.addSubModelFromAssetsFile("M_SenseME_Hand_5.4.0.model");
+            mSenseTimePlugin.addSubModelFromAssetsFile("M_SenseME_Hand_5.9.0.model");
             mSenseTimePlugin.addSubModelFromAssetsFile("M_SenseME_Attribute_1.0.1.model");
             mSenseTimePlugin.addSubModelFromAssetsFile("M_SenseME_Segment_4.10.8.model");
-            mSenseTimePlugin.addSubModelFromAssetsFile("M_SenseAR_Segment_MouthOcclusion_FastV1_1.1.1.model");
-            mSenseTimePlugin.addSubModelFromAssetsFile("M_SenseME_Hand_Skeleton_2d3d_1.0.0.model");
-            mSenseTimePlugin.addSubModelFromAssetsFile("M_SenseME_Hand_Dynamic_Gesture_1.0.0.model");
             mSenseTimePlugin.recoverEffects();
 
             mMirrorProcessor.release();
+            mMirrorProcessor2.release();
         }
 
         @Override
         public void onSurfaceChanged(int width, int height) {
             mMirrorProcessor.setViewportSize(width, height);
+            mMirrorProcessor2.setViewportSize(width, height);
         }
 
         @Override
@@ -294,10 +341,20 @@ public class MainActivity extends AppCompatActivity {
                 mLastUpdateFpsTime = currentTime;
             }
             mFPS++;
-//            int newTexId = mMirrorProcessor.draw(texId);
-            int newTexId = texId;
-            newTexId = mSenseTimePlugin.processTexture(newTexId, texWidth, texHeight);
-            return newTexId;
+
+            int newTexId;
+            if (!CAMERA_FRONT) {
+                // 后置需要横向镜像
+                newTexId = mMirrorProcessor.draw(texId);
+            } else {
+                newTexId = texId;
+            }
+            mHands.send(new TextureFrameImpl(newTexId, texWidth, texHeight, timestampNs / 1000));
+            if (!CAMERA_FRONT) {
+                newTexId = mMirrorProcessor2.draw(newTexId);
+            }
+
+            return mSenseTimePlugin.processTexture(newTexId, texWidth, texHeight);
         }
     };
 
@@ -309,6 +366,8 @@ public class MainActivity extends AppCompatActivity {
             switch (gestures) {
                 case RIGHT_WAVE:
                 case LEFT:
+                case LEFT_HAND_RIGHT_WAVE:
+                case RIGHT_HAND_RIGHT_WAVE:
                     mCurrentStickerIndex--;
                     if (mCurrentStickerIndex < 0) {
                         mCurrentStickerIndex = StickerDataUtils.selected_sticker_paths.size() - 1;
@@ -322,6 +381,8 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 case LEFT_WAVE:
                 case RIGHT:
+                case LEFT_HAND_LEFT_WAVE:
+                case RIGHT_HAND_LEFT_WAVE:
                     mCurrentStickerIndex++;
                     mSoundPool.play(mSwitchStickerSoundId, 1, 1, 0, 0, 1);
                     mSenseTimePlugin.setSticker(StickerDataUtils.selected_sticker_paths.get(mCurrentStickerIndex % StickerDataUtils.selected_sticker_paths.size()));
@@ -342,6 +403,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         mShortVideoRecorder.resume();
+        // 每次页面 resume 时需要重新添加贴纸，因为 pause 会移除
+        PLWatermarkSetting watermarkSetting = new PLWatermarkSetting();
+        watermarkSetting.setSize(1.0f, 1.0f);
+        watermarkSetting.setResourceId(R.drawable.water_mark2);
+        mShortVideoRecorder.setWatermark(watermarkSetting);
     }
 
     @Override

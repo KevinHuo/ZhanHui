@@ -12,6 +12,6 @@ public class MyApplication extends Application {
         super.onCreate();
         PLShortVideoEnv.init(this);
         ToastUtils.init(this);
-        ContextHolder.initial(this);
+        ContextHolder.init(this);
     }
 }

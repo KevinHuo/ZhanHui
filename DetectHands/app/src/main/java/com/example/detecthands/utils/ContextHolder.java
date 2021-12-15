@@ -6,7 +6,7 @@ public class ContextHolder {
 
     static Context sApplicationcontext;
 
-    public static void initial(Context context) {
+    public static void init(Context context) {
         sApplicationcontext = context;
     }
 

@@ -56,27 +56,28 @@ public class StickerDataUtils {
     private static final List<String> selected_stickers = Arrays.asList(
             "20190128153619370478447", // 手势 ok
             "20190128153544436897273", // 手势 大拇哥
-//            "20190128155700265555364", // 手势 yes
             "20190128214915096994874", // 手势 控雨
-            "20210425151428142677409", // 2D 笑哈哈
-            "20210425151452505963993", // 2D 向日葵
             "20201025223709561192827", // 2D 彩色猫耳
             "20201119103030628573263", // 2D 粉色脸颊
             "20161201192236340556464", // 2D 粉色猪猪
-            "20161222220344051672602", // 2D 钢铁侠
             "20200403165617680148039", // 3D 墨镜
-            "20201201143509811380224", // 3D 科技头盔
             "20210401223823619551940", // 3D 金牛
             "20190128153524759899401", // 背景分割 爱心
-            "20201217143605428321833", // 背景分割 宇航员
             "20210914120231452344419", // 2D 猫趴头上
             "20210809171628514924985", // 2D 卡通恐龙
-            "20201119103532637992896"  // 2D 头上长草
+            "20201119103532637992896", // 2D 头上长草
+            "20211207161028932438789", // 3D 卖萌
+            "20190128153643480640749", // 手势 顶篮球
+            "20210309142349632299619", // 3D 皇冠
+            "20201119144738507426868"  // 背景分割 凤冠
     );
 
     public static final List<String> selected_sticker_paths = new ArrayList<>();
     public static final List<String> sticker_trigger_actions = new ArrayList<>();
 
+    /**
+     * 获取各贴纸类型下贴纸的图标下载路径和 id ,按贴纸类型写入到不同 json 文件中
+     */
     public static void getStickerInfo() {
         SenseArMaterialService.shareInstance().authorizeWithAppId(ContextHolder.getContext(), APPID, APPKEY, new SenseArMaterialService.OnAuthorizedListener() {
             @Override
@@ -172,6 +173,9 @@ public class StickerDataUtils {
         });
     }
 
+    /**
+     * 填充挑选贴纸 id 对应的地址列表
+     */
     public static void getStickerPathList() {
         SenseArMaterialService.shareInstance().authorizeWithAppId(ContextHolder.getContext(), APPID, APPKEY, new SenseArMaterialService.OnAuthorizedListener() {
             @Override

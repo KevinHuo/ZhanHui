@@ -4,10 +4,10 @@ import com.google.mediapipe.framework.GlSyncToken;
 import com.google.mediapipe.framework.TextureFrame;
 
 public class TextureFrameImpl implements TextureFrame {
-    private int mTextureId;
-    private int mTexWidth;
-    private int mTexHeight;
-    private long mTimestamp;
+    private final int mTextureId;
+    private final int mTexWidth;
+    private final int mTexHeight;
+    private final long mTimestamp;
 
     public TextureFrameImpl(int textureId, int texWidth, int texHeight, long timestamp) {
         mTextureId = textureId;
