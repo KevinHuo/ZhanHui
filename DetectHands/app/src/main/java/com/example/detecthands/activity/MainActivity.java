@@ -69,7 +69,6 @@ public class MainActivity extends AppCompatActivity {
 
     private QNSenseTimePlugin mSenseTimePlugin;
     private TextureProcessor mMirrorProcessor;
-    private TextureProcessor mMirrorProcessor2;
 
     private TextView mTvFPS;
     private int mFPS;
@@ -161,7 +160,6 @@ public class MainActivity extends AppCompatActivity {
         // 由于短视频 SDK 纹理回调的方向为竖直镜像的，所以需要一个竖直镜像操作将其转正
         mSenseTimePlugin.updateDirection(0, false, true);
         mMirrorProcessor = new TextureProcessor();
-        mMirrorProcessor2 = new TextureProcessor();
 
         mSenseTimePlugin.setFilterStrength(0.8f);
 
@@ -319,13 +317,11 @@ public class MainActivity extends AppCompatActivity {
             mSenseTimePlugin.recoverEffects();
 
             mMirrorProcessor.release();
-            mMirrorProcessor2.release();
         }
 
         @Override
         public void onSurfaceChanged(int width, int height) {
             mMirrorProcessor.setViewportSize(width, height);
-            mMirrorProcessor2.setViewportSize(width, height);
         }
 
         @Override
@@ -356,10 +352,6 @@ public class MainActivity extends AppCompatActivity {
                 newTexId = texId;
             }
             mHands.send(new TextureFrameImpl(newTexId, texWidth, texHeight, timestampNs / 1000));
-            if (!CAMERA_FRONT) {
-                newTexId = mMirrorProcessor2.draw(newTexId);
-            }
-
             return mSenseTimePlugin.processTexture(newTexId, texWidth, texHeight);
         }
     };
